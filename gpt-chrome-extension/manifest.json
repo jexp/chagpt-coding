@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+    "name": "GPT Knowledge Graph Extension",
+    "version": "1.0",
+    "description": "An Extension to turn text into related entities and send them to Neo4j",
+    "permissions": [
+        "storage"
+    ],
+    "options_page": "options.html",      
+    "content_scripts": [
+      {
+        "matches": ["<all_urls>"],
+        "js": ["neo4j-web.min.js", "content.js"]
+      }
+    ] 
+  }
