@@ -22,20 +22,117 @@ function drawNodes(ctx, data) {
     const radius = 10;
     nodes.forEach(node => {
         drawNode(ctx, node, radius);          
+        console.log(node.coords, node.velocity);
     });
   }
 
-  // Function to draw nodes
-function layoutNodes(ctx, data) {
+  function calculateAttraction(data) {
+    const attractionForce = 0.04;
+
+    const nodes = data.nodes;
+    // Attraction forces
+    data.edges.forEach(edge => {
+    const node1 = nodes[edge.fromNode];
+    const node2 = nodes[edge.toNode];
+
+    const [distance, _, dx, dy] = computeDistance(node1, node2);
+
+    // The force magnitude is proportional to the distance
+    const forceMagnitude = attractionForce * distance;
+
+    // The force direction is along the vector between the nodes
+    const forceDirectionX = dx / (distance || 1);
+    const forceDirectionY = dy / (distance || 1);
+
+    // Update the velocities of both nodes
+    node1.velocity[0] += forceMagnitude * forceDirectionX;
+    node1.velocity[1] += forceMagnitude * forceDirectionY;
+    node2.velocity[0] -= forceMagnitude * forceDirectionX;
+    node2.velocity[1] -= forceMagnitude * forceDirectionY;
+});
+
+  }
+
+function computeDistance(node1, node2) {
+    let dx = node2.coords[0] - node1.coords[0];
+    let dy = node2.coords[1] - node1.coords[1];
+
+    let distanceSquared = dx * dx + dy * dy;
+    let distance = Math.sqrt(distanceSquared);
+    return [distance, distanceSquared, dx, dy];
+}
+
+function calculateRepulsion(data) {
     const nodes = data.nodes;
 
-    let width = ctx.canvas.clientWidth;
-    let height = width;
+    const repulsionForce = 2000;
 
-    nodes.forEach(node => {
-        node.coords = [ Math.random() * width, Math.random() * height ];
+    for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+            let node1 = nodes[i];
+            let node2 = nodes[j];
+
+            let [distance, distanceSquared, dx, dy] =  computeDistance(node1, node2);
+
+            // Compute the repulsion force and apply it
+            let repulsion = repulsionForce / distanceSquared;
+            // fly to the left
+            node1.velocity[0] -= dx / distance * repulsion;
+            node1.velocity[1] -= dy / distance * repulsion;
+            // fly to the right
+            node2.velocity[0] += dx / distance * repulsion;
+            node2.velocity[1] += dy / distance * repulsion;
+        }
+    }
+}
+
+function calculateGlobalAttraction(data, size) {
+    const globalAttraction = 0.001; // tweak this constant for different effects
+
+    let center = {coords:[size / 2, size / 2]};
+
+    data.nodes.forEach(node => {
+        let [distance, _, dx, dy] = computeDistance(node, center);
+
+        let force = -distance * globalAttraction; 
+
+        node.velocity[0] += force * dx / distance;
+        node.velocity[1] += force * dy / distance;
     });
-  }
+}
+
+function initializeNodes(data, size) {
+    data.nodes.forEach(node => {
+        node.coords = [ Math.random() * size, Math.random() * size ];
+        node.velocity = [0, 0];  // adding initial velocity of each node
+    });
+}
+function moveNodes(data, timeStep) {
+    // decrease to settle down faster
+    const friction = 0.8;
+
+    data.nodes.forEach(node => {
+        node.coords[0] += node.velocity[0] * timeStep;
+        node.coords[1] += node.velocity[1] * timeStep;
+
+        // optional: apply some friction to the velocities
+        node.velocity[0] *= friction;
+        node.velocity[1] *= friction;
+
+        if (Math.abs(node.velocity[0]) < 1) node.velocity[0] = 0;
+        if (Math.abs(node.velocity[1]) < 1) node.velocity[1] = 0;
+    });
+}
+
+// Function to layout nodes
+function layoutNodes(ctx, data) {
+    const size = Math.min(ctx.canvas.clientWidth, ctx.canvas.clientHeight);
+    const timeStep = 0.1;
+    calculateRepulsion(data);
+    calculateAttraction(data);
+    calculateGlobalAttraction(data, size);
+    moveNodes(data, timeStep);
+}
 
 function drawEdges(ctx, data) {
     ctx.strokeStyle = '#EAEDED';
@@ -49,11 +146,16 @@ function drawEdges(ctx, data) {
         ctx.stroke();
       });
 }
-  
+
+function clearCanvas(ctx) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
 function drawGraph(ctx, data) {
-    layoutNodes(ctx, data);
+    clearCanvas(ctx);    
     drawEdges(ctx, data);
     drawNodes(ctx, data);
+    layoutNodes(ctx, data);
 }
 
 function adjustCanvasToDPi(canvas, ctx) {
@@ -78,7 +180,14 @@ document.addEventListener("DOMContentLoaded", function() {
     if (canvas && canvas.getContext) {
         const ctx = canvas.getContext('2d');
         adjustCanvasToDPi(canvas, ctx);
-        drawGraph(ctx, data);
+        const size = Math.min(ctx.canvas.clientWidth, ctx.canvas.clientHeight);
+        initializeNodes(data, size);  
+        let steps = 1000;  
+        function animate() {
+            drawGraph(ctx, data);
+            if (steps-- > 0) requestAnimationFrame(animate);
+        }
+        animate();
     } else {
       console.error("No canvas found with id 'myCanvas' or canvas.getContext is not a function");
     }
